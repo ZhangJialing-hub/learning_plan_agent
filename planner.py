@@ -1,4 +1,6 @@
 import json
+import math
+
 from config import MODEL, PLAN_FILE, client
 
 
@@ -89,6 +91,9 @@ def validate_plan_format(plan):
         if isinstance(hours, bool) or not isinstance(hours, (int, float)):
             return False, [f"第{index}项的 hours 必须是数字"]
 
+        if not math.isfinite(hours):
+            return False, [f"第{index}项的 hours 必须是有限数字"]
+
         if hours <= 0:
             return False, [f"第{index}项的 hours 必须大于0"]
 
@@ -123,6 +128,25 @@ def check_plan_hours(plan, max_hours):
 # 4. 生成、验证、反馈、重试
 def run_agent(user_goal, days, max_hours):
 
+    if isinstance(days, bool) or not isinstance(days, int) or days <= 0:
+        return {
+            "success": False,
+            "message": "学习天数必须是正整数",
+            "errors": ["学习天数必须是正整数"],
+        }
+
+    if (
+        isinstance(max_hours, bool)
+        or not isinstance(max_hours, (int, float))
+        or not math.isfinite(max_hours)
+        or max_hours <= 0
+    ):
+        return {
+            "success": False,
+            "message": "每天学习时长必须是大于 0 的有限数字",
+            "errors": ["每天学习时长必须是大于 0 的有限数字"],
+        }
+
     max_retries = 3
     errors = []
 
@@ -138,6 +162,11 @@ def run_agent(user_goal, days, max_hours):
             return {"success": False, "message": "调用模型失败", "errors": [str(e)]}
 
         # 第一层：JSON 解析
+        if not isinstance(content, str) or not content.strip():
+            errors = ["上一次没有返回任何计划内容，请返回合法 JSON。"]
+            print("模型没有返回内容")
+            continue
+
         try:
             plan = json.loads(content)
         except json.JSONDecodeError:

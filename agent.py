@@ -1,7 +1,8 @@
 import json
+import math
 
 from config import MODEL, client
-from memory1 import add_history, format_memory, list_history, remember
+from memory import add_history, format_memory, list_history, remember
 from planner import run_agent
 from storage import load_plan
 
@@ -41,7 +42,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "list_history",
-            "description": "查看用户过去制定过哪些学习计划（只含目标、天数、每天时长、时间，不含每天的具体任务）",
+            "description": "查看用户过去制定过哪些学习计划（只含目标、天数、每天时长，不含每天的具体任务）",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
@@ -100,7 +101,7 @@ def ask_agent(user_input):
 
 注意 view_plan 与 list_history 的区别：
 - view_plan 返回当前保存的最新一份计划，包含每天的具体任务。
-- list_history 返回最近若干次任务的索引（目标、天数、时长、时间），不包含每天的具体内容。
+- list_history 返回最近若干次任务的索引（目标、天数、时长），不包含每天的具体内容。
 - 用户问"以前做过什么""历史计划""制定过哪些计划"时，必须调用 list_history，不要用 view_plan 代替。
 
 {memory_text}调用 create_plan 时：
@@ -201,7 +202,12 @@ def ask_agent(user_input):
             tool_attempts[function_name] = attempts + 1
 
             try:
-                arguments = json.loads(tool_call.function.arguments)
+                # 无参数工具可能返回空串或 null，统一按空对象处理
+                raw_arguments = tool_call.function.arguments
+                arguments = json.loads(raw_arguments) if raw_arguments else {}
+
+                if not isinstance(arguments, dict):
+                    raise ValueError("工具参数必须是 JSON 对象")
 
                 print("模型提供的参数：", arguments)
 
@@ -221,6 +227,7 @@ def ask_agent(user_input):
                     elif (
                         isinstance(days, bool)
                         or not isinstance(days, (int, float))
+                        or not math.isfinite(days)
                         or days <= 0
                         or int(days) != days
                     ):
@@ -231,6 +238,7 @@ def ask_agent(user_input):
                     elif (
                         isinstance(max_hours, bool)
                         or not isinstance(max_hours, (int, float))
+                        or not math.isfinite(max_hours)
                         or max_hours <= 0
                     ):
                         result = "执行失败：学习时长参数不合法"
@@ -255,7 +263,8 @@ def ask_agent(user_input):
                             # 记录历史任务，写入失败不影响本次结果
                             try:
                                 add_history(goal, int(days), max_hours)
-                            except OSError:
+                            except Exception:
+                                # 历史写入失败不影响本次计划结果
                                 pass
                         else:
                             tool_status["summary"] = (
@@ -270,8 +279,9 @@ def ask_agent(user_input):
                     plan = load_plan()
 
                     if plan is None:
-                        result = "目前没有保存过学习计划。"
-                        tool_status["summary"] = result
+                        result = "目前没有可用的学习计划：文件不存在或内容已损坏。"
+                        tool_status["success"] = True
+                        tool_status["summary"] = "当前没有可用的学习计划"
 
                     else:
                         result = json.dumps(plan, ensure_ascii=False)
@@ -286,7 +296,8 @@ def ask_agent(user_input):
 
                     if not items:
                         result = "还没有历史记录：用户还没有成功生成过学习计划。"
-                        tool_status["summary"] = result
+                        tool_status["success"] = True
+                        tool_status["summary"] = "当前没有历史记录"
 
                     else:
                         result = json.dumps(
@@ -359,49 +370,10 @@ def ask_agent(user_input):
     show_execution_summary(completed_steps, failed_steps)
 
 
-# 退出词表：整句匹配，不做包含匹配
-EXIT_WORDS = {
-    "退出",
-    "结束",
-    "再见",
-    "拜拜",
-    "不聊了",
-    "走了",
-    "挂了",
-    "我要走了",
-    "就这样" "exit",
-    "quit",
-    "bye",
-    "q",
-}
-
-# 允许句末出现的语气词，去掉后再匹配，例如"退出吧""拜拜啦"
-TRAILING_PARTICLES = "吧啦了啊呀哦嘛"
-
-
-def normalize_input(text):
-    """统一大小写、去掉空白和句末标点，便于比较。"""
-    text = text.strip().lower()
-    text = text.replace(" ", "").replace("\u3000", "")
-    return text.rstrip("。.!！?？~～,，")
-
-
-# 判断是否要求退出
-def is_exit_command(text):
-    text = normalize_input(text)
-
-    if not text:
-        return False
-
-    # 命令式：/exit、/quit、/q
-    if text.startswith("/"):
-        return text[1:] in {"exit", "quit", "q"}
-
-    # 自然语言：去掉句末语气词后整句匹配
-    return text.rstrip(TRAILING_PARTICLES) in EXIT_WORDS
-
-
+# 退出方式只有 Ctrl+C，不再识别任何退出短语
 def main():
+    print("提示：输入内容后按回车；按 Ctrl+C 退出程序。")
+
     while True:
 
         try:
@@ -414,15 +386,11 @@ def main():
         if not user_input:
             continue
 
-        if is_exit_command(user_input):
-            print("Agent 已退出，再见！")
-            break
-
         try:
             ask_agent(user_input)
 
         except KeyboardInterrupt:
-            print("\n已中断当前请求，Agent 已退出，再见！")
+            print("\nAgent 已退出，再见！")
             break
 
         except Exception as e:

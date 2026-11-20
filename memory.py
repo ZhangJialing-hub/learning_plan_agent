@@ -1,24 +1,42 @@
 import json
 import os
-from datetime import datetime
 
 from config import MEMORY_FILE
 
 MAX_HISTORY = 5
+MAX_KEY_LENGTH = 50
+MAX_VALUE_LENGTH = 200
 
-# 读取用户画像；文件不存在或损坏时返回空画像。
+
+def _single_line(text, limit):
+    """压缩换行和多余空白，并截断到指定长度，避免污染提示词。"""
+    return " ".join(str(text).split())[:limit]
+
+
+# 读取用户画像；文件不存在、损坏或结构不正确时返回空画像。
 def load_profile():
+    empty = {"preferences": {}, "history": []}
+
     if not os.path.exists(MEMORY_FILE):
-        return {"preferences": {}, "history": []}
+        return empty
 
     try:
         with open(MEMORY_FILE, "r", encoding="utf-8") as f:
             profile = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return {"preferences": {}, "history": []}
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        return empty
 
-    profile.setdefault("preferences", {})
-    profile.setdefault("history", [])
+    # 顶层不是对象时按空画像处理
+    if not isinstance(profile, dict):
+        return empty
+
+    # 字段类型不正确时重置，避免后续读写崩溃
+    if not isinstance(profile.get("preferences"), dict):
+        profile["preferences"] = {}
+
+    if not isinstance(profile.get("history"), list):
+        profile["history"] = []
+
     return profile
 
 
@@ -29,6 +47,12 @@ def save_profile(profile):
 
 # 写入一条长期偏好，覆盖同名偏好
 def remember(key, value):
+    key = _single_line(key, MAX_KEY_LENGTH)
+    value = _single_line(value, MAX_VALUE_LENGTH)
+
+    if not key or not value:
+        raise ValueError("偏好名称和内容不能为空")
+
     profile = load_profile()
     profile["preferences"][key] = value
     save_profile(profile)
@@ -53,7 +77,8 @@ def add_history(goal, days, max_hours):
 def list_history():
     profile = load_profile()
 
-    items = profile["history"][-MAX_HISTORY:]
+    history = [item for item in profile["history"] if isinstance(item, dict)]
+    items = history[-MAX_HISTORY:]
 
     return [
         {
@@ -72,10 +97,16 @@ def format_memory():
     lines = []
 
     preferences = profile["preferences"]
-    if preferences:
+    preference_lines = []
+    for key, value in preferences.items():
+        safe_key = _single_line(key, MAX_KEY_LENGTH)
+        safe_value = _single_line(value, MAX_VALUE_LENGTH)
+        if safe_key and safe_value:
+            preference_lines.append(f"- {safe_key}：{safe_value}")
+
+    if preference_lines:
         lines.append("已知用户偏好：")
-        for key, value in preferences.items():
-            lines.append(f"- {key}：{value}")
+        lines.extend(preference_lines)
 
     if profile["history"]:
         lines.append(

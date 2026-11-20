@@ -1,0 +1,28 @@
+{
+    "preferences": {
+        "每天最多学习时长": "2"
+    },
+    "history": [
+        {
+            "goal": "三天速成Java",
+            "days": 3,
+            "max_hours": 2
+        },
+        {
+            "goal": "速成Java",
+            "days": 3,
+            "max_hours": 2
+        },
+        {
+            "goal": "速成离散数学",
+            "days": 3,
+            "max_hours": 2
+        },
+        {
+            "goal": "速成 Python",
+            "days": 3,
+            "max_hours": 3,
+            "created_at": "2026-11-20 08:13"
+        }
+    ]
+}

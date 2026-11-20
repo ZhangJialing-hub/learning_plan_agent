@@ -206,3 +206,21 @@ def save_plan(plan):
 
     with open(PLAN_FILE, "w", encoding="utf-8") as f:
         json.dump(plan, f, ensure_ascii=False, indent=4)
+
+if __name__ == "__main__":
+
+    goal = input("请告诉我你的学习目标：")
+
+    try:
+        days = int(input("计划安排多少天：(请输入数字，例如 3，不要加单位)"))
+        max_hours = float(input("每天最多学习多少小时：(请输入数字，例如 1.5，不要加单位)"))
+
+        if days <= 0:
+            print("学习天数必须大于0。")
+        elif max_hours <= 0:
+            print("每天最多学习时长必须大于0。")
+        else:
+            run_agent(goal, days, max_hours)
+
+    except ValueError:
+        print("请输入合法数字，例如 3 或 1.5。")

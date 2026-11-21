@@ -7,9 +7,8 @@ MAX_HISTORY = 5
 MAX_KEY_LENGTH = 50
 MAX_VALUE_LENGTH = 200
 
-
+#压缩换行和多余空白，并截断到指定长度，避免污染提示词。
 def _single_line(text, limit):
-    """压缩换行和多余空白，并截断到指定长度，避免污染提示词。"""
     return " ".join(str(text).split())[:limit]
 
 
@@ -86,7 +85,7 @@ def list_history():
             "days": item.get("days"),
             "max_hours": item.get("max_hours"),
         }
-        for item in reversed(items)
+        for item in reverse(items)
     ]
 
 

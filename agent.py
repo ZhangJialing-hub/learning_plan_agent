@@ -83,7 +83,7 @@ def show_execution_summary(completed_steps, failed_steps):
         print("\n本次没有执行任何工具。")
 
 
-def ask_agent(user_input):
+def ask_agent(user_input, conversation_history):
 
     memory_text = format_memory()
 
@@ -118,6 +118,7 @@ def ask_agent(user_input):
 6. 不要把执行失败的任务说成已经成功完成。
 """,
         },
+          *conversation_history,
         {"role": "user", "content": user_input},
     ]
 
@@ -131,6 +132,7 @@ def ask_agent(user_input):
 
     # 记录每个工具在本次请求中实际执行了多少次
     tool_attempts = {}
+    # 记录本次请求中实际调用了多少次工具
     total_tool_calls = 0
     MAX_TOTAL_TOOL_CALLS = 10
 
@@ -150,6 +152,9 @@ def ask_agent(user_input):
             print("\nAgent：", message.content)
 
             show_execution_summary(completed_steps, failed_steps)
+
+            conversation_history.append({"role": "user", "content": user_input})
+            conversation_history.append({"role": "assistant", "content": message.content or ""})
 
             return
 
@@ -343,7 +348,11 @@ def ask_agent(user_input):
 
             # 5. 把工具执行结果交还给模型
             messages.append(
-                {"role": "tool", "tool_call_id": tool_call.id, "content": str(result)}
+                {
+                    "role": "tool", 
+                "tool_call_id": tool_call.id, 
+                "content": str(result)
+                }
             )
 
             print("工具执行结果：", result)
@@ -373,6 +382,7 @@ def ask_agent(user_input):
 # 退出方式只有 Ctrl+C，不再识别任何退出短语
 def main():
     print("提示：输入内容后按回车；按 Ctrl+C 退出程序。")
+    conversation_history = []
 
     while True:
 
@@ -387,7 +397,7 @@ def main():
             continue
 
         try:
-            ask_agent(user_input)
+            ask_agent(user_input, conversation_history)
 
         except KeyboardInterrupt:
             print("\nAgent 已退出，再见！")
